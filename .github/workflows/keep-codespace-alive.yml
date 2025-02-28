@@ -13,81 +13,58 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: List and ping active codespaces
+      - name: Keep codespace alive using GitHub API
         env:
           GH_TOKEN: ${{ secrets.CODESPACE_PAT }}
+          CODESPACE_NAME: "redesigned-yodel-x55rpq69jjj4h6jp6"
+          GITHUB_USER: "JepriiGans"
         run: |
-          # Install GitHub CLI jika belum ada
-          if ! command -v gh &> /dev/null; then
-            echo "Installing GitHub CLI..."
-            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-            sudo apt update
-            sudo apt install gh
+          echo "Attempting to keep codespace alive using GitHub API..."
+          
+          # Dapatkan informasi tentang codespace
+          echo "Getting codespace information..."
+          CODESPACE_INFO=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/user/codespaces" | jq '.[] | select(.name=="'$CODESPACE_NAME'")')
+          
+          echo "Codespace info:"
+          echo "$CODESPACE_INFO" | jq '.'
+          
+          # Dapatkan status codespace
+          CODESPACE_STATE=$(echo "$CODESPACE_INFO" | jq -r '.state')
+          echo "Codespace state: $CODESPACE_STATE"
+          
+          # Jika codespace tidak aktif, coba aktifkan
+          if [ "$CODESPACE_STATE" != "running" ] && [ "$CODESPACE_STATE" != "idle" ]; then
+            echo "Codespace is not running. Attempting to start it..."
+            
+            # Coba start codespace menggunakan API
+            START_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/user/codespaces/$CODESPACE_NAME/start")
+            
+            echo "Start response:"
+            echo "$START_RESPONSE" | jq '.'
+            
+            # Tunggu beberapa saat agar codespace mulai
+            echo "Waiting for codespace to start..."
+            sleep 30
           fi
           
-          # Debug: Tampilkan informasi token (tanpa menampilkan token itu sendiri)
-          echo "Checking GitHub CLI authentication..."
-          gh auth status || echo "GitHub CLI authentication failed"
+          # Ping codespace dengan mengakses URL
+          echo "Pinging codespace URL..."
+          CODESPACE_URL="https://$CODESPACE_NAME.github.dev/"
+          curl -s -I "$CODESPACE_URL" || echo "Failed to ping codespace URL"
           
-          # Debug: Tampilkan versi GitHub CLI
-          echo "GitHub CLI version:"
-          gh --version
+          # Alternatif: Gunakan GitHub API untuk melakukan ping
+          echo "Pinging codespace using GitHub API..."
+          PING_RESPONSE=$(curl -s \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/user/codespaces/$CODESPACE_NAME")
           
-          # Debug: Tampilkan repository saat ini
-          echo "Current repository: $GITHUB_REPOSITORY"
+          echo "Ping response:"
+          echo "$PING_RESPONSE" | jq '.'
           
-          # Debug: Tampilkan semua codespace tanpa filter
-          echo "All codespaces (if any):"
-          gh codespace list --json name,state,repository,displayName || echo "Failed to list codespaces"
-          
-          # Dapatkan daftar codespace aktif (termasuk status "Available")
-          echo "Listing active codespaces..."
-          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle" or .state=="Available") | .name')
-          
-          echo "All active codespaces (any repository):"
-          echo "$CODESPACES"
-          
-          # Filter untuk repository saat ini
-          REPO_CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle" or .state=="Available") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
-          
-          echo "Active codespaces for this repository ($GITHUB_REPOSITORY):"
-          echo "$REPO_CODESPACES"
-          
-          if [ -z "$REPO_CODESPACES" ]; then
-            echo "No active codespaces found for this repository."
-            exit 0
-          fi
-          
-          # Ping setiap codespace aktif
-          echo "Found active codespaces, pinging them..."
-          for CS in $REPO_CODESPACES; do
-            echo "Processing codespace: $CS"
-            
-            # Periksa status codespace
-            CS_STATE=$(gh codespace list --json name,state | jq -r '.[] | select(.name=="'$CS'") | .state')
-            echo "Codespace state: $CS_STATE"
-            
-            # Jika codespace dalam status "Available", coba mulai terlebih dahulu menggunakan API
-            if [ "$CS_STATE" == "Available" ]; then
-              echo "Codespace is not running. Attempting alternative methods to keep it alive..."
-              
-              # Metode 1: Mencoba menggunakan perintah list dengan filter
-              echo "Method 1: Using list with filter"
-              gh codespace list --json name,state,repository | jq -r '.[] | select(.name=="'$CS'")'
-              
-              # Metode 2: Mencoba menggunakan perintah code (tanpa benar-benar membuka)
-              echo "Method 2: Using code command with --status flag"
-              gh codespace code --status || echo "Failed to check codespace status"
-              
-              # Metode 3: Mencoba menggunakan perintah stop dan kemudian code
-              echo "Method 3: Using stop and then code commands"
-              gh codespace stop || echo "Failed to stop codespace"
-              sleep 5
-              gh codespace code --status || echo "Failed to check codespace status after stop"
-            else
-              # Jika codespace sudah running atau idle, coba ping menggunakan SSH
-              echo "Codespace is already running. Attempting to ping using SSH..."
-              gh codespace ssh -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping using SSH"
-            fi
-          done 
+          echo "Codespace ping completed." 
