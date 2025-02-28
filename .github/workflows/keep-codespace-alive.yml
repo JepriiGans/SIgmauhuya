@@ -1,0 +1,44 @@
+name: Keep Codespace Alive
+
+on:
+  schedule:
+    # Jalankan setiap 20 menit
+    - cron: '*/20 * * * *'
+  workflow_dispatch: # Memungkinkan menjalankan workflow secara manual
+
+jobs:
+  ping-codespace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: List and ping active codespaces
+        env:
+          GH_TOKEN: ${{ secrets.CODESPACE_PAT }}
+        run: |
+          # Install GitHub CLI jika belum ada
+          if ! command -v gh &> /dev/null; then
+            echo "Installing GitHub CLI..."
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+          fi
+          
+          # Dapatkan daftar codespace aktif
+          echo "Listing active codespaces..."
+          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
+          
+          if [ -z "$CODESPACES" ]; then
+            echo "No active codespaces found for this repository."
+            exit 0
+          fi
+          
+          # Ping setiap codespace aktif
+          echo "Found active codespaces, pinging them..."
+          for CS in $CODESPACES; do
+            echo "Pinging codespace: $CS"
+            # Perintah SSH ke codespace (hanya untuk menjaga koneksi tetap aktif)
+            gh codespace ssh --codespace $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS"
+          done 
