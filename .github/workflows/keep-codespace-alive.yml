@@ -21,38 +21,65 @@ jobs:
         run: |
           echo "Attempting to keep codespace alive using GitHub API..."
           
-          # Dapatkan informasi tentang codespace
+          # Dapatkan informasi tentang semua codespace
           echo "Getting codespace information..."
-          CODESPACE_INFO=$(curl -s -H "Authorization: token $GH_TOKEN" \
+          ALL_CODESPACES=$(curl -s -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/user/codespaces" | jq '.[] | select(.name=="'$CODESPACE_NAME'")')
+            "https://api.github.com/user/codespaces")
           
-          echo "Codespace info:"
-          echo "$CODESPACE_INFO" | jq '.'
+          echo "All codespaces (first 100 chars):"
+          echo "$ALL_CODESPACES" | head -c 100
           
-          # Dapatkan status codespace
-          CODESPACE_STATE=$(echo "$CODESPACE_INFO" | jq -r '.state')
-          echo "Codespace state: $CODESPACE_STATE"
+          # Cari codespace dengan nama yang sesuai
+          echo "Finding codespace with name: $CODESPACE_NAME"
+          CODESPACE_INFO=$(echo "$ALL_CODESPACES" | jq -r '.codespaces[] | select(.name=="'$CODESPACE_NAME'") // empty')
           
-          # Jika codespace tidak aktif, coba aktifkan
-          if [ "$CODESPACE_STATE" != "running" ] && [ "$CODESPACE_STATE" != "idle" ]; then
-            echo "Codespace is not running. Attempting to start it..."
-            
-            # Coba start codespace menggunakan API
-            START_RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/user/codespaces/$CODESPACE_NAME/start")
-            
-            echo "Start response:"
-            echo "$START_RESPONSE" | jq '.'
-            
-            # Tunggu beberapa saat agar codespace mulai
-            echo "Waiting for codespace to start..."
-            sleep 30
+          # Jika tidak ditemukan, coba format JSON lain
+          if [ -z "$CODESPACE_INFO" ]; then
+            echo "Trying alternative JSON format..."
+            CODESPACE_INFO=$(echo "$ALL_CODESPACES" | jq -r '.[] | select(.name=="'$CODESPACE_NAME'") // empty')
           fi
           
-          # Ping codespace dengan mengakses URL
+          # Jika masih tidak ditemukan, tampilkan semua data untuk debugging
+          if [ -z "$CODESPACE_INFO" ]; then
+            echo "Codespace not found. Showing full JSON structure for debugging:"
+            echo "$ALL_CODESPACES" | jq '.'
+            echo "Trying direct API call to the specific codespace..."
+            CODESPACE_INFO=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/user/codespaces/$CODESPACE_NAME")
+          fi
+          
+          echo "Codespace info (if found):"
+          echo "$CODESPACE_INFO" | jq '.' || echo "Failed to parse codespace info as JSON"
+          
+          # Dapatkan status codespace jika informasi ditemukan
+          if [ -n "$CODESPACE_INFO" ]; then
+            CODESPACE_STATE=$(echo "$CODESPACE_INFO" | jq -r '.state // "unknown"')
+            echo "Codespace state: $CODESPACE_STATE"
+            
+            # Jika codespace tidak aktif, coba aktifkan
+            if [ "$CODESPACE_STATE" != "running" ] && [ "$CODESPACE_STATE" != "idle" ]; then
+              echo "Codespace is not running. Attempting to start it..."
+              
+              # Coba start codespace menggunakan API
+              START_RESPONSE=$(curl -s -X POST \
+                -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/user/codespaces/$CODESPACE_NAME/start")
+              
+              echo "Start response:"
+              echo "$START_RESPONSE" | jq '.' || echo "$START_RESPONSE"
+              
+              # Tunggu beberapa saat agar codespace mulai
+              echo "Waiting for codespace to start..."
+              sleep 30
+            fi
+          else
+            echo "Could not find codespace info. Continuing with direct pings..."
+          fi
+          
+          # Ping codespace dengan mengakses URL (ini akan dilakukan terlepas dari apakah informasi codespace ditemukan)
           echo "Pinging codespace URL..."
           CODESPACE_URL="https://$CODESPACE_NAME.github.dev/"
           curl -s -I "$CODESPACE_URL" || echo "Failed to ping codespace URL"
@@ -64,7 +91,7 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/user/codespaces/$CODESPACE_NAME")
           
-          echo "Ping response:"
-          echo "$PING_RESPONSE" | jq '.'
+          echo "Ping response (first 100 chars):"
+          echo "$PING_RESPONSE" | head -c 100
           
           echo "Codespace ping completed." 
