@@ -30,12 +30,16 @@ jobs:
           echo "Checking GitHub CLI authentication..."
           gh auth status || echo "GitHub CLI authentication failed"
           
+          # Debug: Tampilkan versi GitHub CLI
+          echo "GitHub CLI version:"
+          gh --version
+          
           # Debug: Tampilkan repository saat ini
           echo "Current repository: $GITHUB_REPOSITORY"
           
           # Debug: Tampilkan semua codespace tanpa filter
           echo "All codespaces (if any):"
-          gh codespace list --json name,state,repository || echo "Failed to list codespaces"
+          gh codespace list --json name,state,repository,displayName || echo "Failed to list codespaces"
           
           # Dapatkan daftar codespace aktif (termasuk status "Available")
           echo "Listing active codespaces..."
@@ -72,9 +76,27 @@ jobs:
               # Tunggu beberapa saat agar codespace mulai
               echo "Waiting for codespace to start..."
               sleep 30
+              
+              # Periksa status lagi setelah mencoba memulai
+              CS_STATE=$(gh codespace list --json name,state | jq -r '.[] | select(.name=="'$CS'") | .state')
+              echo "Codespace state after start attempt: $CS_STATE"
             fi
             
-            # Coba ping codespace
-            echo "Pinging codespace: $CS"
-            gh codespace ssh $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS"
+            # Metode alternatif untuk menjaga codespace tetap aktif
+            echo "Attempting to keep codespace alive using alternative method..."
+            
+            # Metode 1: Menggunakan perintah list dengan refresh
+            echo "Method 1: Using list with refresh"
+            gh codespace list --json name,state,repository --codespace $CS || echo "Failed to refresh codespace $CS"
+            
+            # Metode 2: Mencoba menggunakan perintah view
+            echo "Method 2: Using view command"
+            gh codespace view $CS || echo "Failed to view codespace $CS"
+            
+            # Metode 3: Mencoba menggunakan SSH jika codespace running atau idle
+            if [ "$CS_STATE" == "running" ] || [ "$CS_STATE" == "idle" ]; then
+              echo "Method 3: Using SSH (only for running/idle codespaces)"
+              echo "Pinging codespace: $CS"
+              gh codespace ssh $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS using SSH"
+            fi
           done 
