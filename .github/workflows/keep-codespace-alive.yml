@@ -26,18 +26,38 @@ jobs:
             sudo apt install gh
           fi
           
+          # Debug: Tampilkan informasi token (tanpa menampilkan token itu sendiri)
+          echo "Checking GitHub CLI authentication..."
+          gh auth status || echo "GitHub CLI authentication failed"
+          
+          # Debug: Tampilkan repository saat ini
+          echo "Current repository: $GITHUB_REPOSITORY"
+          
+          # Debug: Tampilkan semua codespace tanpa filter
+          echo "All codespaces (if any):"
+          gh codespace list --json name,state,repository || echo "Failed to list codespaces"
+          
           # Dapatkan daftar codespace aktif
           echo "Listing active codespaces..."
-          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
+          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | .name')
           
-          if [ -z "$CODESPACES" ]; then
+          echo "All active codespaces (any repository):"
+          echo "$CODESPACES"
+          
+          # Filter untuk repository saat ini
+          REPO_CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
+          
+          echo "Active codespaces for this repository ($GITHUB_REPOSITORY):"
+          echo "$REPO_CODESPACES"
+          
+          if [ -z "$REPO_CODESPACES" ]; then
             echo "No active codespaces found for this repository."
             exit 0
           fi
           
           # Ping setiap codespace aktif
           echo "Found active codespaces, pinging them..."
-          for CS in $CODESPACES; do
+          for CS in $REPO_CODESPACES; do
             echo "Pinging codespace: $CS"
             # Perintah SSH ke codespace (hanya untuk menjaga koneksi tetap aktif)
             gh codespace ssh --codespace $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS"
