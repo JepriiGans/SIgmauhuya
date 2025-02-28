@@ -68,35 +68,26 @@ jobs:
             CS_STATE=$(gh codespace list --json name,state | jq -r '.[] | select(.name=="'$CS'") | .state')
             echo "Codespace state: $CS_STATE"
             
-            # Jika codespace dalam status "Available", coba mulai terlebih dahulu
+            # Jika codespace dalam status "Available", coba mulai terlebih dahulu menggunakan API
             if [ "$CS_STATE" == "Available" ]; then
-              echo "Codespace is not running. Attempting to start it..."
-              gh codespace start $CS || echo "Failed to start codespace $CS"
+              echo "Codespace is not running. Attempting alternative methods to keep it alive..."
               
-              # Tunggu beberapa saat agar codespace mulai
-              echo "Waiting for codespace to start..."
-              sleep 30
+              # Metode 1: Mencoba menggunakan perintah list dengan filter
+              echo "Method 1: Using list with filter"
+              gh codespace list --json name,state,repository | jq -r '.[] | select(.name=="'$CS'")'
               
-              # Periksa status lagi setelah mencoba memulai
-              CS_STATE=$(gh codespace list --json name,state | jq -r '.[] | select(.name=="'$CS'") | .state')
-              echo "Codespace state after start attempt: $CS_STATE"
-            fi
-            
-            # Metode alternatif untuk menjaga codespace tetap aktif
-            echo "Attempting to keep codespace alive using alternative method..."
-            
-            # Metode 1: Menggunakan perintah list dengan refresh
-            echo "Method 1: Using list with refresh"
-            gh codespace list --json name,state,repository --codespace $CS || echo "Failed to refresh codespace $CS"
-            
-            # Metode 2: Mencoba menggunakan perintah view
-            echo "Method 2: Using view command"
-            gh codespace view $CS || echo "Failed to view codespace $CS"
-            
-            # Metode 3: Mencoba menggunakan SSH jika codespace running atau idle
-            if [ "$CS_STATE" == "running" ] || [ "$CS_STATE" == "idle" ]; then
-              echo "Method 3: Using SSH (only for running/idle codespaces)"
-              echo "Pinging codespace: $CS"
-              gh codespace ssh $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS using SSH"
+              # Metode 2: Mencoba menggunakan perintah code (tanpa benar-benar membuka)
+              echo "Method 2: Using code command with --status flag"
+              gh codespace code --status || echo "Failed to check codespace status"
+              
+              # Metode 3: Mencoba menggunakan perintah stop dan kemudian code
+              echo "Method 3: Using stop and then code commands"
+              gh codespace stop || echo "Failed to stop codespace"
+              sleep 5
+              gh codespace code --status || echo "Failed to check codespace status after stop"
+            else
+              # Jika codespace sudah running atau idle, coba ping menggunakan SSH
+              echo "Codespace is already running. Attempting to ping using SSH..."
+              gh codespace ssh -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping using SSH"
             fi
           done 
