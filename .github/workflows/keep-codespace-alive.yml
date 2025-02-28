@@ -58,7 +58,23 @@ jobs:
           # Ping setiap codespace aktif
           echo "Found active codespaces, pinging them..."
           for CS in $REPO_CODESPACES; do
+            echo "Processing codespace: $CS"
+            
+            # Periksa status codespace
+            CS_STATE=$(gh codespace list --json name,state | jq -r '.[] | select(.name=="'$CS'") | .state')
+            echo "Codespace state: $CS_STATE"
+            
+            # Jika codespace dalam status "Available", coba mulai terlebih dahulu
+            if [ "$CS_STATE" == "Available" ]; then
+              echo "Codespace is not running. Attempting to start it..."
+              gh codespace start --codespace $CS || echo "Failed to start codespace $CS"
+              
+              # Tunggu beberapa saat agar codespace mulai
+              echo "Waiting for codespace to start..."
+              sleep 30
+            fi
+            
+            # Coba ping codespace
             echo "Pinging codespace: $CS"
-            # Perintah SSH ke codespace (hanya untuk menjaga koneksi tetap aktif)
             gh codespace ssh --codespace $CS -c "echo 'Ping at $(date)' >> /tmp/codespace-ping.log" || echo "Failed to ping $CS"
           done 
