@@ -37,15 +37,15 @@ jobs:
           echo "All codespaces (if any):"
           gh codespace list --json name,state,repository || echo "Failed to list codespaces"
           
-          # Dapatkan daftar codespace aktif
+          # Dapatkan daftar codespace aktif (termasuk status "Available")
           echo "Listing active codespaces..."
-          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | .name')
+          CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle" or .state=="Available") | .name')
           
           echo "All active codespaces (any repository):"
           echo "$CODESPACES"
           
           # Filter untuk repository saat ini
-          REPO_CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
+          REPO_CODESPACES=$(gh codespace list --json name,state,repository | jq -r '.[] | select(.state=="running" or .state=="idle" or .state=="Available") | select(.repository=="'$GITHUB_REPOSITORY'") | .name')
           
           echo "Active codespaces for this repository ($GITHUB_REPOSITORY):"
           echo "$REPO_CODESPACES"
