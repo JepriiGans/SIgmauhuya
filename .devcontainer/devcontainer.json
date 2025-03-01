@@ -4,18 +4,38 @@
 	"portsAttributes": {
 		"3389": {
 			"label": "RDP",
-			"onAutoForward": "notify"
+			"onAutoForward": "notify",
+			"protocol": "http",
+			"visibility": "private",
+			"elevateIfNeeded": true,
+			"requireLocalPort": true,
+			"actionType": "share"
 		},
 		"8006": {
 			"label": "Custom Port",
-			"onAutoForward": "notify"
+			"onAutoForward": "notify",
+			"protocol": "http",
+			"visibility": "private",
+			"elevateIfNeeded": true,
+			"actionType": "share"
 		}
 	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"ms-vscode-remote.remote-containers"
-			]
+			],
+			"settings": {
+				"remote.autoForwardPorts": true,
+				"remote.forwardPortsInComments": true
+			}
 		}
-	}
-}
+	},
+	"remoteUser": "codespace",
+	"hostRequirements": {
+		"cpus": 2,
+		"memory": "4gb",
+		"storage": "32gb"
+	},
+	"updateContentCommand": "echo 'Preparing ports 3389 and 8006 for forwarding...'"
+} 
