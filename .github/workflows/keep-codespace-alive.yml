@@ -100,46 +100,74 @@ jobs:
           
           echo "Attempting to keep port forwarding active..."
           
-          # Dapatkan informasi tentang port yang di-forward
-          echo "Getting port forwarding information..."
-          PORTS_INFO=$(curl -s -H "Authorization: token $GH_TOKEN" \
+          # Metode alternatif 1: Menggunakan API devcontainer configuration
+          echo "Method 1: Using devcontainer configuration API..."
+          DEVCONTAINER_RESPONSE=$(curl -s -X PATCH \
+            -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/user/codespaces/$CODESPACE_NAME/ports")
+            -H "Content-Type: application/json" \
+            -d '{"devcontainer_path":".devcontainer/devcontainer.json","forwardPorts":[3389,8006]}' \
+            "https://api.github.com/user/codespaces/$CODESPACE_NAME")
           
-          echo "Ports info:"
-          echo "$PORTS_INFO" | jq '.'
+          echo "Devcontainer response (first 100 chars):"
+          echo "$DEVCONTAINER_RESPONSE" | head -c 100
           
-          # Jika tidak ada informasi port, coba buka port secara manual
-          if [ -z "$PORTS_INFO" ] || [ "$PORTS_INFO" == "[]" ]; then
-            echo "No port forwarding found. Attempting to update port configuration..."
-            
-            # Coba aktifkan port 3389 (RDP)
-            echo "Activating port 3389 (RDP)..."
-            curl -s -X PATCH \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Content-Type: application/json" \
-              -d '{"ports":[{"number":3389,"visibility":"private"}]}' \
-              "https://api.github.com/user/codespaces/$CODESPACE_NAME"
-            
-            # Coba aktifkan port 8006
-            echo "Activating port 8006..."
-            curl -s -X PATCH \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Content-Type: application/json" \
-              -d '{"ports":[{"number":8006,"visibility":"private"}]}' \
-              "https://api.github.com/user/codespaces/$CODESPACE_NAME"
-          fi
+          # Metode alternatif 2: Menggunakan GraphQL API untuk port forwarding
+          echo "Method 2: Using GraphQL API..."
           
-          # Ping port 3389 (RDP)
+          # Generate GraphQL query untuk port forwarding
+          GRAPHQL_QUERY='{
+            "query": "mutation UpdateCodespaceForwardedPorts($input: UpdateCodespaceForwardedPortsInput!) { updateCodespaceForwardedPorts(input: $input) { ... on UpdateCodespaceForwardedPortsSuccess { success } ... on UpdateCodespaceForwardedPortsError { error } } }",
+            "variables": {
+              "input": {
+                "codespaceName": "'$CODESPACE_NAME'",
+                "ports": [
+                  {"number": 3389, "visibility": "private"},
+                  {"number": 8006, "visibility": "private"}
+                ]
+              }
+            }
+          }'
+          
+          # Execute GraphQL query
+          GRAPHQL_RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$GRAPHQL_QUERY" \
+            "https://api.github.com/graphql")
+          
+          echo "GraphQL response:"
+          echo "$GRAPHQL_RESPONSE" | jq '.'
+          
+          # Metode 3: Ping URL forwarded langsung
+          echo "Method 3: Direct ping to forwarded URLs..."
+          
+          # Ping port 3389 (RDP) dengan URL alternatif
           echo "Pinging port 3389 (RDP)..."
-          PORT_URL_3389="https://$CODESPACE_NAME-3389.preview.app.github.dev/"
-          curl -s -I "$PORT_URL_3389" || echo "Failed to ping port 3389"
+          # Format 1
+          PORT_URL_3389="https://$CODESPACE_NAME-3389.githubpreview.dev/"
+          curl -s -I "$PORT_URL_3389" || echo "Failed to ping port 3389 format 1"
           
-          # Ping port 8006
+          # Format 2
+          PORT_URL_3389_2="https://$CODESPACE_NAME-3389.preview.app.github.dev/"
+          curl -s -I "$PORT_URL_3389_2" || echo "Failed to ping port 3389 format 2"
+          
+          # Format 3
+          PORT_URL_3389_3="https://$CODESPACE_NAME.app.github.dev:3389/"
+          curl -s -I "$PORT_URL_3389_3" || echo "Failed to ping port 3389 format 3"
+          
+          # Ping port 8006 dengan URL alternatif
           echo "Pinging port 8006..."
-          PORT_URL_8006="https://$CODESPACE_NAME-8006.preview.app.github.dev/"
-          curl -s -I "$PORT_URL_8006" || echo "Failed to ping port 8006"
+          # Format 1
+          PORT_URL_8006="https://$CODESPACE_NAME-8006.githubpreview.dev/"
+          curl -s -I "$PORT_URL_8006" || echo "Failed to ping port 8006 format 1"
+          
+          # Format 2
+          PORT_URL_8006_2="https://$CODESPACE_NAME-8006.preview.app.github.dev/"
+          curl -s -I "$PORT_URL_8006_2" || echo "Failed to ping port 8006 format 2"
+          
+          # Format 3
+          PORT_URL_8006_3="https://$CODESPACE_NAME.app.github.dev:8006/"
+          curl -s -I "$PORT_URL_8006_3" || echo "Failed to ping port 8006 format 3"
           
           echo "Codespace and port forwarding ping completed." 
