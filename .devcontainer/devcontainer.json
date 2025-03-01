@@ -1,0 +1,21 @@
+{
+	"name": "Codespace Configuration",
+	"forwardPorts": [3389, 8006],
+	"portsAttributes": {
+		"3389": {
+			"label": "RDP",
+			"onAutoForward": "notify"
+		},
+		"8006": {
+			"label": "Custom Port",
+			"onAutoForward": "notify"
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode-remote.remote-containers"
+			]
+		}
+	}
+}
